@@ -1,4 +1,4 @@
-﻿#include "nr2_unpacker.h"
+#include "nr2_unpacker.h"
 #include <strsafe.h>
 #include <stdarg.h>
 #include <tchar.h>
@@ -46,7 +46,7 @@ typedef struct _DW_PACDATA
 	DWORD pack_cnt;
 	DWORD file_type;
 	DWORD hdr_offset;
-	DW_PACINFO info[1];	
+	DW_PACINFO info[1];
 } DW_PACDATA;
 
 
@@ -82,22 +82,13 @@ int main()
 	char* lastSlash;
 
 	if (!IsProcessorSupportedSSE2()) {
-		MessageBoxA(NULL, "处理器不支持SSE2指令集", "错误", MB_ICONERROR);
+		fprintf(stderr, "错误:处理器不支持SSE2指令集\n");
 		ExitProcess(ERROR_INSTALL_PLATFORM_UNSUPPORTED);
 	}
 
 	if (!IsAboveWinXP()) {
-		MessageBoxA(NULL, "Windows版本过旧，需要XP以上版本", "错误", MB_ICONERROR);
+		fprintf(stderr, "错误:Windows版本过旧,需要XP以上版本\n");
 		ExitProcess(ERROR_OLD_WIN_VERSION);
-	}
-
-	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	if (argc <= 1) {
-	ErrShowHelp:
-		MessageBoxA(NULL,
-			"用法:\nnr2_unpacker <输入.pac>\n\n示例:\nnr2_unpacker c:\\SYSTEM00000.pac",
-			"用法说明", MB_ICONINFORMATION);
-		goto ErrExit;
 	}
 
 	AllocConsole();
@@ -105,9 +96,18 @@ int main()
 
 	printf(NR2_APPTITLE "\n");
 
+	argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	if (argc <= 1) {
+	ErrShowHelp:
+		printf("用法:\n");
+		printf("nr2_unpacker <输入.pac>");
+		printf("nr2_unpacker c:\\SYSTEM00000.pac\n");
+		goto ErrExit;
+	}
+
 	for (i = 1; i < (unsigned int)argc; ++i) {
 		if (WideCharToMultiByte(CP_ACP, 0, argv[i], -1, path, NR2_MAXTEXT, NULL, NULL) == 0) {
-			MessageBoxA(NULL, "错误:路径转换失败", "错误", MB_ICONERROR);
+			fprintf(stderr, "错误:路径转换失败\n");
 			goto ErrExit;
 		}
 
@@ -115,6 +115,7 @@ int main()
 
 		ext = strrchr(path, '.');
 		if (!ext || _stricmp(ext, ".pac") != 0) {
+			fprintf(stderr, "错误:文件扩展名必须为.pac\n");
 			goto ErrShowHelp;
 		}
 
@@ -128,19 +129,17 @@ int main()
 			NULL);
 
 		if (hFile == INVALID_HANDLE_VALUE) {
-			char errorMsg[256];
-			sprintf_s(errorMsg, "错误:无法打开文件，错误代码:%lu", GetLastError());
-			MessageBoxA(NULL, errorMsg, "错误", MB_ICONERROR);
+			fprintf(stderr, "错误:无法打开文件 %s(错误代码: %lu)\n", path, GetLastError());
 			goto ErrExit;
 		}
 
 		if (!ReadFile(hFile, &hdr, sizeof(DW_PACHEADER), &ret, NULL) || ret != sizeof(DW_PACHEADER)) {
-			MessageBoxA(NULL, "错误:读取文件头失败", "错误", MB_ICONERROR);
+			fprintf(stderr, "错误:读取文件头失败\n");
 			goto ErrExit;
 		}
 
 		if (memcmp(hdr.magic, "DW_PACK", 7) != 0) {
-			MessageBoxA(NULL, "错误:不支持的文件格式", "错误", MB_ICONERROR);
+			fprintf(stderr, "错误:不支持的文件格式\n");
 			goto ErrExit;
 		}
 
@@ -148,7 +147,7 @@ int main()
 		offset = size + sizeof(DW_PACHEADER);
 
 		if (size == 0) {
-			MessageBoxA(NULL, "错误:PAC文件中没有文件", "错误", MB_ICONERROR);
+			fprintf(stderr, "错误: PAC文件中没有文件\n");
 			goto ErrExit;
 		}
 
@@ -156,14 +155,14 @@ int main()
 			MemFree(pf);
 			pf = (DW_PACFILE*)MemAlloc(size);
 			if (!pf) {
-				MessageBoxA(NULL, "错误:内存分配失败", "错误", MB_ICONERROR);
+				fprintf(stderr, "错误: 内存分配失败\n");
 				goto ErrExit;
 			}
 			pf_len = size;
 		}
 
 		if (!ReadFile(hFile, pf, size, &ret, NULL) || ret != size) {
-			MessageBoxA(NULL, "错误:读取文件条目失败", "错误", MB_ICONERROR);
+			fprintf(stderr, "错误: 读取文件条目失败\n");
 			goto ErrExit;
 		}
 
@@ -201,10 +200,10 @@ int main()
 				}
 			}
 
-			printf("%u/%u: %s\n", j + 1, hdr.file_cnt, pf[j].path);
+			printf("解包 %u/%u: %s\n", j + 1, hdr.file_cnt, pf[j].path);
 
 			if (SetFilePointer(hFile, offset + pf[j].file_offset, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
-				MessageBoxA(NULL, "错误:文件定位失败", "错误", MB_ICONERROR);
+				fprintf(stderr, "错误: 文件定位失败\n");
 				goto ErrExit;
 			}
 
@@ -212,14 +211,14 @@ int main()
 				MemFree(src_buf);
 				src_buf = (DW_PACDATA*)MemAlloc(pf[j].pack_size + 2);
 				if (!src_buf) {
-					MessageBoxA(NULL, "错误:内存分配失败", "错误", MB_ICONERROR);
+					fprintf(stderr, "错误: 内存分配失败\n");
 					goto ErrExit;
 				}
 				src_len = pf[j].pack_size;
 			}
 
 			if (!ReadFile(hFile, src_buf, pf[j].pack_size, &ret, NULL) || ret != pf[j].pack_size) {
-				MessageBoxA(NULL, "错误:读取压缩数据失败", "错误", MB_ICONERROR);
+				fprintf(stderr, "错误: 读取压缩数据失败\n");
 				goto ErrExit;
 			}
 
@@ -245,24 +244,26 @@ int main()
 
 			if (pf[j].packed_flag == 1) {
 				if (!NR2_UnpackFile(path, src_buf, pf[j].pack_size)) {
+					fprintf(stderr, "错误: 解压文件失败 %s\n", pf[j].path);
 					goto ErrExit;
 				}
 			}
 			else {
 				if (!NR2_PutFile(path, src_buf, pf[j].pack_size)) {
+					fprintf(stderr, "错误: 写入文件失败 %s\n", pf[j].path);
 					goto ErrExit;
 				}
 			}
 		}
 
-		printf("完成\n");
+		printf("完成! 解包了 %u 个文件\n", hdr.file_cnt);
 		CloseHandle(hFile);
 		hFile = INVALID_HANDLE_VALUE;
 	}
 
 ErrExit:
 	if (__appstd) {
-		FreeConsole();
+		CloseHandle(__appstd);
 	}
 	if (hFile != INVALID_HANDLE_VALUE) {
 		CloseHandle(hFile);
@@ -288,7 +289,7 @@ void __cdecl NR2_ErrorMsg(const char* fmt, ...)
 	va_start(arg, fmt);
 	vsprintf_s(str, NR2_MAXTEXT, fmt, arg);
 	va_end(arg);
-	MessageBoxA(GetConsoleWindow(), str, NR2_APPTITLE, MB_ICONWARNING);
+	fprintf(stderr, "%s\n", str);
 }
 
 void __cdecl NR2_Printf(const char* fmt, ...)
@@ -303,6 +304,7 @@ void __cdecl NR2_Printf(const char* fmt, ...)
 
 	len = (DWORD)strlen(str);
 	str[len] = '\n';
+	str[len + 1] = '\0';
 	if (__appstd) {
 		WriteFile(__appstd, str, len + 1, &len, NULL);
 	}
@@ -422,7 +424,7 @@ BOOL NR2_PutFile(LPCSTR path, void* data, DWORD size)
 	FILEMAP map = { 0 };
 
 	if (!NR2_OpenFileMap(&map, path, size)) {
-		NR2_ErrorMsg("错误:写入文件失败");
+		NR2_ErrorMsg("错误: 写入文件失败");
 		return FALSE;
 	}
 
@@ -440,12 +442,12 @@ BOOL NR2_UnpackFile(LPCSTR path, void* data, DWORD pack_size)
 	DWORD i;
 
 	if (pack_size < sizeof(DW_PACDATA)) {
-		NR2_ErrorMsg("错误:文件大小无效");
+		NR2_ErrorMsg("错误: 文件大小无效");
 		return FALSE;
 	}
 
 	if (pacData->magic != 0x1234) {
-		NR2_ErrorMsg("错误:魔数错误");
+		NR2_ErrorMsg("错误: 魔数错误");
 		return FALSE;
 	}
 
@@ -458,13 +460,13 @@ BOOL NR2_UnpackFile(LPCSTR path, void* data, DWORD pack_size)
 		total += pacData->info[i].unpack_size;
 		offset = pacData->hdr_offset + pacData->info[i].pack_size + pacData->info[i].data_offset;
 		if (!pacData->info[i].pack_size || !pacData->info[i].unpack_size || offset > pack_size) {
-			NR2_ErrorMsg("错误:发现损坏的数据头");
+			NR2_ErrorMsg("错误: 发现损坏的数据头");
 			return FALSE;
 		}
 	}
 
 	if (!NR2_OpenFileMap(&map, path, total)) {
-		NR2_ErrorMsg("错误:写入文件失败");
+		NR2_ErrorMsg("错误: 写入文件失败");
 		return FALSE;
 	}
 
